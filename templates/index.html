@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <!-- Meta Tags and Title -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Preguntas</title>
+
+    <!-- Include Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600&display=swap" rel="stylesheet">
+
+    <!-- Include Font Awesome CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+
+    <!-- Include Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom Styles -->
+    <style>
+        body {
+            font-family: 'Titillium Web', sans-serif;
+        }
+        .primary-color {
+            color: rgba(255, 102, 0, 1);
+        }
+        .btn-primary {
+            background-color: rgba(255, 102, 0, 1);
+            border: none;
+        }
+        .question-block {
+            padding: 20px;
+            margin: 0 -15px;
+        }
+        .question-block:nth-child(odd) {
+            background-color: #ffffff;
+        }
+        .question-block:nth-child(even) {
+            background-color: #d9d9d9;
+        }
+        .question-links {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .question-links a {
+            display: inline-block;
+            margin: 0 5px;
+            padding: 5px 10px;
+            background-color: rgba(255, 102, 0, 1);
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 50%;
+        }
+        .question-links a:hover {
+            background-color: rgba(255, 102, 0, 0.8);
+        }
+        /* Styles for the floating "Volver Arriba" button */
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background-color: rgba(255, 102, 0, 1);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        .back-to-top:hover {
+            background-color: rgba(255, 102, 0, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="primary-color">Generador de Preguntas</h1>
+        <div class="mb-3">
+            <label for="numQuestions">Número de preguntas:</label>
+            <input type="number" id="numQuestions" min="1" value="1" style="width:80px; display:inline-block;">
+            <button type="button" class="btn btn-secondary" id="setNumQuestions">Establecer</button>
+        </div>
+        <div class="question-links" id="questionLinks"></div>
+        <form id="questionsForm">
+            <div class="mb-3">
+                <label class="form-label">Texto Asociado:</label>
+                <input type="text" class="form-control associated-text" placeholder="ID del texto asociado" required>
+            </div>
+            <div id="questionsContainer">
+                <!-- Question blocks will be inserted here -->
+            </div>
+            <div class="mt-3">
+                <button type="button" class="btn btn-primary" id="addQuestion">+</button>
+                <button type="submit" class="btn btn-success">Generar CSV</button>
+                <button type="button" class="btn btn-secondary" id="saveDraftAs">Guardar como...</button>
+                <button type="button" class="btn btn-secondary" id="loadDraft">Cargar</button>
+            </div>
+        </form>
+
+        <!-- Hidden template for question blocks -->
+        <div class="question-block mb-3" id="question-template" style="display: none;">
+            <h3>Pregunta X</h3>
+
+            <label class="form-label">Enunciado de la pregunta:</label>
+            <input type="text" class="form-control statement" placeholder="Escribe la pregunta" required>
+
+            <!-- Proceso Dropdown -->
+            <label class="form-label mt-2">Proceso:</label>
+            <select class="form-select ability" required>
+                <option value="" selected disabled>Selecciona un proceso</option>
+                {% for process in processes|sort(attribute='name') %}
+                <option value="{{ process['id'] }}">{{ process['name'] }}</option>
+                {% endfor %}
+            </select>
+
+            <!-- Tarea Dropdown -->
+            <label class="form-label mt-2">Tarea:</label>
+            <select class="form-select subability" required>
+                <option value="" selected disabled>Selecciona una tarea</option>
+                {% for task in tasks|sort(attribute='name') %}
+                <option value="{{ task['id'] }}" data-parent="{{ task['parent'] }}">{{ task['name'] }}</option>
+                {% endfor %}
+            </select>
+
+            <!-- Explicación Input -->
+            <label class="form-label mt-2">Explicación:</label>
+            <input type="text" class="form-control explanation" placeholder="Escribe la explicación" required>
+
+            <div class="mt-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <label class="form-label">Opciones:</label>
+                    <label class="form-label">Respuesta Correcta:</label>
+                </div>
+                <div>
+                    {% for i in range(1, 5) %}
+                    <div class="input-group mb-1">
+                        <span class="input-group-text">{{ i }}</span>
+                        <input type="text" class="form-control option" placeholder="Escribe la opción">
+                        <div class="input-group-text">
+                            <input type="radio" name="correct_option_X" value="{{ i }}" class="form-check-input mt-0 correct-radio">
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drafts Modal -->
+    <div class="modal fade" id="draftsModal" tabindex="-1" aria-labelledby="draftsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="draftsModalLabel">Cargar Borrador</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <ul id="draftsList" class="list-group">
+              <!-- Draft items will be inserted here -->
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating "Volver Arriba" button -->
+    <button class="back-to-top" id="backToTop">
+        <i class="fas fa-arrow-circle-up"></i>
+    </button>
+
+    <!-- Include Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- JavaScript Section -->
+    <script>
+        // Existing JavaScript functions...
+
+        function createQuestionBlock() {
+            const template = document.getElementById('question-template');
+            const newQuestion = template.cloneNode(true);
+            newQuestion.style.display = ''; // Make it visible
+            newQuestion.id = ''; // Remove the id attribute from the cloned element
+
+            // Reset text inputs
+            newQuestion.querySelectorAll('input[type="text"]').forEach(input => input.value = '');
+
+            // Reset select elements
+            newQuestion.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+
+            // Uncheck radio buttons
+            newQuestion.querySelectorAll('.correct-radio').forEach(radio => radio.checked = false);
+
+            return newQuestion;
+        }
+
+        function updateQuestions() {
+            const container = document.getElementById('questionsContainer');
+            const questions = container.querySelectorAll('.question-block');
+            const questionLinks = document.getElementById('questionLinks');
+            questionLinks.innerHTML = '';
+            questions.forEach((block, index) => {
+                const questionNumber = index + 1;
+                block.id = `question-${questionNumber}`;
+                block.querySelector('h3').innerText = `Pregunta ${questionNumber}`;
+
+                // Update radio button names
+                block.querySelectorAll('.correct-radio').forEach(radio => {
+                    radio.name = `correct_option_${index}`;
+                });
+
+                // Attach event listener to the Proceso select
+                const abilitySelect = block.querySelector('.ability');
+                abilitySelect.removeEventListener('change', handleAbilityChange);
+                abilitySelect.addEventListener('change', handleAbilityChange);
+
+                // Create navigation links
+                const link = document.createElement('a');
+                link.href = `#question-${questionNumber}`;
+                link.innerText = questionNumber;
+                questionLinks.appendChild(link);
+            });
+        }
+
+        // Function to handle Proceso change
+        function handleAbilityChange(event) {
+            const abilitySelect = event.target;
+            const questionBlock = abilitySelect.closest('.question-block');
+            const subabilitySelect = questionBlock.querySelector('.subability');
+            const selectedAbility = abilitySelect.value;
+
+            // Get all options in the Tarea select
+            const allOptions = subabilitySelect.querySelectorAll('option');
+
+            // Show or hide options based on the selected Proceso
+            allOptions.forEach(option => {
+                if (option.value === '') {
+                    // Always show the default option
+                    option.style.display = '';
+                    option.disabled = false;
+                } else if (option.getAttribute('data-parent') === selectedAbility) {
+                    option.style.display = '';
+                    option.disabled = false;
+                } else {
+                    option.style.display = 'none';
+                    option.disabled = true;
+                }
+            });
+
+            // Reset Tarea select only for the current question
+            subabilitySelect.selectedIndex = 0;
+        }
+
+        document.getElementById('setNumQuestions').addEventListener('click', () => {
+            const numQuestions = parseInt(document.getElementById('numQuestions').value);
+            if (isNaN(numQuestions) || numQuestions < 1) {
+                alert('Por favor, ingresa un número válido de preguntas (1 o más).');
+                return;
+            }
+
+            const container = document.getElementById('questionsContainer');
+
+            // Remove existing questions
+            container.innerHTML = '';
+
+            // Create the specified number of questions
+            for (let i = 0; i < numQuestions; i++) {
+                const newQuestion = createQuestionBlock();
+                container.appendChild(newQuestion);
+            }
+
+            // Now we can update questions
+            updateQuestions();
+        });
+
+        document.getElementById('addQuestion').addEventListener('click', () => {
+            const container = document.getElementById('questionsContainer');
+            const newQuestion = createQuestionBlock();
+            container.appendChild(newQuestion);
+            updateQuestions();
+        });
+
+        document.getElementById('questionsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const questions = [];
+            let valid = true;
+            const container = document.getElementById('questionsContainer');
+            const associatedText = document.querySelector('.associated-text').value.trim();
+            container.querySelectorAll('.question-block').forEach((block, index) => {
+                const statement = block.querySelector('.statement').value.trim();
+                const ability = block.querySelector('.ability').value;
+                const subability = block.querySelector('.subability').value;
+                const explanation = block.querySelector('.explanation').value.trim();
+                const options = Array.from(block.querySelectorAll('.option')).map(opt => opt.value.trim());
+                const correctOptionRadio = block.querySelector(`input[name="correct_option_${index}"]:checked`);
+                if (!correctOptionRadio) {
+                    alert(`La pregunta ${index + 1} no tiene una respuesta correcta seleccionada.`);
+                    valid = false;
+                    return;
+                }
+                const correctOption = correctOptionRadio.value;
+                if (!statement || !ability || !subability || !explanation || !associatedText || options.some(option => !option)) {
+                    alert(`Por favor, completa todos los campos de la pregunta ${index + 1}.`);
+                    valid = false;
+                    return;
+                }
+                questions.push({ statement, ability, subability, explanation, associated_text: associatedText, options, correct_option: correctOption });
+            });
+            if (!valid) return;
+            const response = await fetch('/generate_csv', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questions })
+            });
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'questions.csv';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } else {
+                const error = await response.json();
+                alert(error.error || "Ocurrió un error al generar el archivo CSV.");
+            }
+        });
+
+        // Handle "Volver Arriba" button click
+        const backToTopButton = document.getElementById('backToTop');
+        backToTopButton.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        // Show or hide the "Volver Arriba" button based on scroll position
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                backToTopButton.style.display = 'flex';
+            } else {
+                backToTopButton.style.display = 'none';
+            }
+        });
+
+        // Function to save drafts with a name
+        function saveDraftAs() {
+            const draftName = prompt('Ingresa un nombre para el borrador:');
+            if (!draftName) {
+                alert('No se guardó el borrador porque no ingresaste un nombre.');
+                return;
+            }
+
+            const draftKey = `draft_${draftName}`;
+            const existingDrafts = JSON.parse(localStorage.getItem('draft_names')) || [];
+
+            if (existingDrafts.includes(draftName)) {
+                if (!confirm('Ya existe un borrador con ese nombre. ¿Deseas sobrescribirlo?')) {
+                    return;
+                }
+            } else {
+                existingDrafts.push(draftName);
+                localStorage.setItem('draft_names', JSON.stringify(existingDrafts));
+            }
+
+            const draft = {
+                associatedText: document.querySelector('.associated-text').value.trim(),
+                questions: []
+            };
+            const container = document.getElementById('questionsContainer');
+            container.querySelectorAll('.question-block').forEach((block, index) => {
+                const statement = block.querySelector('.statement').value.trim();
+                const ability = block.querySelector('.ability').value;
+                const subability = block.querySelector('.subability').value;
+                const explanation = block.querySelector('.explanation').value.trim();
+                const options = Array.from(block.querySelectorAll('.option')).map(opt => opt.value.trim());
+                const correctOptionRadio = block.querySelector(`input[name="correct_option_${index}"]:checked`);
+                const correctOption = correctOptionRadio ? correctOptionRadio.value : null;
+
+                draft.questions.push({
+                    statement,
+                    ability,
+                    subability,
+                    explanation,
+                    options,
+                    correctOption
+                });
+            });
+
+            localStorage.setItem(draftKey, JSON.stringify(draft));
+            alert(`Borrador "${draftName}" guardado correctamente.`);
+        }
+
+        // Function to load drafts using a modal
+        function loadDraft() {
+            const existingDrafts = JSON.parse(localStorage.getItem('draft_names')) || [];
+            if (existingDrafts.length === 0) {
+                alert('No hay ningún borrador guardado.');
+                return;
+            }
+
+            const draftsList = document.getElementById('draftsList');
+            draftsList.innerHTML = '';
+
+            existingDrafts.forEach(draftName => {
+                const listItem = document.createElement('li');
+                listItem.className = 'list-group-item list-group-item-action';
+                listItem.textContent = draftName;
+                listItem.addEventListener('click', () => {
+                    loadDraftByName(draftName);
+                    // Close the modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('draftsModal'));
+                    modal.hide();
+                });
+                draftsList.appendChild(listItem);
+            });
+
+            // Show the modal
+            const draftsModal = new bootstrap.Modal(document.getElementById('draftsModal'));
+            draftsModal.show();
+        }
+
+        function loadDraftByName(draftName) {
+            const draftKey = `draft_${draftName}`;
+            const draft = JSON.parse(localStorage.getItem(draftKey));
+            if (!draft) {
+                alert(`No se encontró un borrador con el nombre "${draftName}".`);
+                return;
+            }
+
+            document.querySelector('.associated-text').value = draft.associatedText || '';
+
+            const container = document.getElementById('questionsContainer');
+            container.innerHTML = '';
+
+            draft.questions.forEach((questionData, index) => {
+                const newQuestion = createQuestionBlock();
+                container.appendChild(newQuestion);
+
+                const statementInput = newQuestion.querySelector('.statement');
+                const abilitySelect = newQuestion.querySelector('.ability');
+                const subabilitySelect = newQuestion.querySelector('.subability');
+                const explanationInput = newQuestion.querySelector('.explanation');
+                const optionInputs = newQuestion.querySelectorAll('.option');
+                const correctOptionRadios = newQuestion.querySelectorAll('.correct-radio');
+
+                statementInput.value = questionData.statement;
+                abilitySelect.value = questionData.ability;
+
+                // Trigger change event to update subabilities
+                abilitySelect.dispatchEvent(new Event('change'));
+
+                subabilitySelect.value = questionData.subability;
+                explanationInput.value = questionData.explanation;
+
+                optionInputs.forEach((input, idx) => {
+                    input.value = questionData.options[idx] || '';
+                });
+
+                correctOptionRadios.forEach(radio => {
+                    radio.checked = radio.value === questionData.correctOption;
+                });
+            });
+
+            updateQuestions();
+            alert(`Borrador "${draftName}" cargado correctamente.`);
+        }
+
+        // Update the event listener for saving drafts
+        document.getElementById('saveDraftAs').addEventListener('click', saveDraftAs);
+        document.getElementById('loadDraft').addEventListener('click', loadDraft);
+
+        // Initial call to set up event listeners and generate the first question
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('questionsContainer');
+            const newQuestion = createQuestionBlock();
+            container.appendChild(newQuestion);
+            updateQuestions();
+        });
+
+    </script>
+</body>
+</html>
